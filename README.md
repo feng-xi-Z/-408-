@@ -1,12 +1,15 @@
 # 研途 408 · 考研刷题 & 速背
 
+[![Build](https://github.com/feng-xi-Z/-408-/actions/workflows/build.yml/badge.svg)](https://github.com/feng-xi-Z/-408-/actions/workflows/build.yml)
+
 一个**完全离线**的安卓考研学习 App：刷题 + 速背。不联网、不申请网络权限，所有答题记录只存在手机本地。
 
 <p align="center">
   <img src="docs/screenshot-detail.jpg" width="290" alt="题目详解界面">
 </p>
 
-**快速开始**：下载 [`dist/kaoyan-408.apk`](dist/kaoyan-408.apk)（84 KB，Android 5.0+），传到手机点开安装即可。
+**快速开始**：到 [**Releases**](https://github.com/feng-xi-Z/-408-/releases/latest) 下载 `kaoyan-408.apk`（84 KB，Android 5.0+），传到手机点开安装即可。
+也可以直接用仓库里的 [`dist/kaoyan-408.apk`](dist/kaoyan-408.apk) 或 [`dist/kaoyan-408.html`](dist/kaoyan-408.html)。
 
 两个入口：
 
@@ -99,9 +102,11 @@
 
 ```
 kaoyan-app/
+├─ .github/workflows/       CI：push 自动构建、打 tag 自动发 Release
 ├─ dist/
-│  ├─ kaoyan-408.apk         ← 装这个（80 KB）
-│  └─ kaoyan-408.html        ← 或这个（单文件离线版，205 KB）
+│  ├─ kaoyan-408.apk         ← 装这个（84 KB）
+│  └─ kaoyan-408.html        ← 或这个（单文件离线版，221 KB）
+├─ docs/                     界面截图
 ├─ web/                      前端源码
 │  ├─ index.html             外壳（data-*.js 由构建脚本内联）
 │  ├─ app.css                设计系统与所有组件样式
@@ -151,6 +156,35 @@ node tools/build-apk.mjs
 ```
 
 `build-apk.mjs` 的七个步骤：`aapt2 compile` → `aapt2 link` → `javac` → `d8` → 写入 dex → `zipalign` → `apksigner`。
+
+脚本同时支持 Windows 和 Linux / macOS：会在 `ANDROID_SDK_ROOT`（没有则用项目内 `.sdk/`）里自动找 `build-tools` 与 `platform`，Windows 下把 `.bat` 交给 `cmd /c` 执行。
+
+### CI 自动构建与发布
+
+推送到 `main` 会自动跑一遍完整流程（合并单文件 → 校验题库 → 静态审计 → jsdom 端到端测试 → 构建 APK），产物在 Actions 的 Artifacts 里。
+
+**打 tag 会自动创建 Release**：
+
+```bash
+git tag -a v1.0.04 -m "研途 408 v1.0.04"
+git push origin v1.0.04
+```
+
+Release 附件取的是仓库里已提交的 `dist/`，也就是你本地签名的那两个文件 —— 所以下载安装后能和后续版本正常覆盖升级。
+
+> 如果想让 CI 构建的 Artifact 也保持同一签名，把 `android/keystore/kaoyan.keystore` 转成 base64
+> 存进仓库 Settings → Secrets → `ANDROID_KEYSTORE_BASE64`，workflow 会自动还原使用。
+
+## 六点五、本机开发环境
+
+这台机器上 git 已经装好（免安装版）：
+
+- 位置：`E:\Git`，`git.exe` 在 `E:\Git\cmd\`，已加入用户 PATH
+- 自带 Git Bash：`E:\Git\usr\bin\bash.exe`
+- 项目仓库的推送用的是 `.gitbin/ssh/` 下那把部署密钥，公钥已加到 GitHub
+- 日常同步：`node .gitbin/sync.mjs "这次改了什么"`
+
+如果要换一台机器，装个 Git for Windows，自己配 SSH key 或 token 即可，仓库本身不需要这些。
 
 ---
 

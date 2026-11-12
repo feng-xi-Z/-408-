@@ -1,26 +1,65 @@
-/* 不依赖 Gradle，直接用 aapt2 / javac / d8 / zipalign / apksigner 打出可安装的 APK */
+/* 不依赖 Gradle，直接用 aapt2 / javac / d8 / zipalign / apksigner 打出可安装的 APK。
+   Windows 与 Linux / macOS 均可运行；CI 里设置 ANDROID_SDK_ROOT 即可。 */
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 const ROOT = process.cwd();
-const BT = path.join(ROOT, '.sdk/build-tools/android-14');
-const AJAR = path.join(ROOT, '.sdk/platform/android-35/android.jar');
+const IS_WIN = process.platform === 'win32';
 const AND = path.join(ROOT, 'android');
 const OUT = path.join(ROOT, 'dist');
 const B = path.join(ROOT, '.build');
 
-const AAPT2 = path.join(BT, 'aapt2.exe');
-const D8 = path.join(BT, 'd8.bat');
-const ZIPALIGN = path.join(BT, 'zipalign.exe');
-const APKSIGNER = path.join(BT, 'apksigner.bat');
+/* ---------- 定位 SDK ---------- */
+function listDirs(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => d.name)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+}
+function pickBuildTools(sdk) {
+  const base = path.join(sdk, 'build-tools');
+  for (const name of listDirs(base)) {
+    const p = path.join(base, name);
+    if (fs.existsSync(path.join(p, 'aapt2.exe')) || fs.existsSync(path.join(p, 'aapt2'))) return p;
+  }
+  throw new Error('在 ' + base + ' 下找不到含 aapt2 的 build-tools（先运行 node tools/fetch-sdk.mjs）');
+}
+function pickPlatformJar(sdk) {
+  // 标准 SDK 是 platforms/，直接下载 platform-*.zip 解压出来是 platform/
+  for (const dirName of ['platforms', 'platform']) {
+    const base = path.join(sdk, dirName);
+    for (const name of listDirs(base)) {
+      const jar = path.join(base, name, 'android.jar');
+      if (fs.existsSync(jar)) return jar;
+    }
+  }
+  throw new Error('在 ' + sdk + ' 下找不到 android.jar（先运行 node tools/fetch-sdk.mjs）');
+}
 
-function run(cmd, args, cwd) {
+const SDK = process.env.ANDROID_SDK_ROOT || process.env.ANDROID_HOME || path.join(ROOT, '.sdk');
+const BT = pickBuildTools(SDK);
+const AJAR = pickPlatformJar(SDK);
+
+const t = (winName, nixName) => path.join(BT, IS_WIN ? winName : nixName);
+const AAPT2 = t('aapt2.exe', 'aapt2');
+const D8 = t('d8.bat', 'd8');
+const ZIPALIGN = t('zipalign.exe', 'zipalign');
+const APKSIGNER = t('apksigner.bat', 'apksigner');
+
+/* ---------- 执行 ---------- */
+function rawRun(cmd, args, cwd) {
   return new Promise((res, rej) => {
     const p = spawn(cmd, args, { cwd: cwd || ROOT, stdio: 'inherit' });
-    p.on('error', e => rej(e));
+    p.on('error', rej);
     p.on('close', c => (c === 0 ? res() : rej(new Error(path.basename(cmd) + ' 退出码 ' + c))));
   });
+}
+function run(cmd, args, cwd) {
+  // Windows 下 .bat / .cmd 必须经 cmd /c 调用
+  if (IS_WIN && /\.(bat|cmd)$/i.test(cmd)) return rawRun('cmd.exe', ['/c', cmd, ...args], cwd);
+  return rawRun(cmd, args, cwd);
 }
 function walk(dir, ext, acc = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -30,12 +69,14 @@ function walk(dir, ext, acc = []) {
   }
   return acc;
 }
-function must(p, label) {
-  if (!fs.existsSync(p)) throw new Error('缺少' + label + '：' + p);
-}
 
-must(AAPT2, ' aapt2'); must(AJAR, ' android.jar'); must(D8, ' d8');
-must(path.join(AND, 'assets/kaoyan.html'), ' assets/kaoyan.html（请先运行 node tools/build.mjs）');
+console.log(`SDK        : ${SDK}`);
+console.log(`build-tools: ${BT}`);
+console.log(`android.jar: ${AJAR}`);
+
+if (!fs.existsSync(path.join(AND, 'assets/kaoyan.html'))) {
+  throw new Error('缺少 android/assets/kaoyan.html —— 请先运行 node tools/build.mjs');
+}
 
 fs.rmSync(B, { recursive: true, force: true });
 fs.mkdirSync(path.join(B, 'gen'), { recursive: true });
@@ -63,7 +104,7 @@ await run(AAPT2, [
 ]);
 console.log(`      版本：v${VER.name}（versionCode ${VER.code}）`);
 
-console.log('\n[3/7] 编译 Java 源码 (javac 17, target 8)');
+console.log('\n[3/7] 编译 Java 源码 (javac, target 8)');
 const javaFiles = [...walk(path.join(AND, 'src'), '.java'), ...walk(path.join(B, 'gen'), '.java')];
 if (!javaFiles.length) throw new Error('没有找到 Java 源文件');
 await run('javac', [
@@ -77,7 +118,7 @@ await run('javac', [
 
 console.log('\n[4/7] 转 dex (d8)');
 const classes = walk(path.join(B, 'classes'), '.class');
-await run('cmd.exe', ['/c', D8, '--lib', AJAR, '--min-api', '21', '--release',
+await run(D8, ['--lib', AJAR, '--min-api', '21', '--release',
   '--output', path.join(B, 'dex'), ...classes]);
 
 console.log('\n[5/7] 把 classes.dex 写入 APK');
@@ -89,6 +130,11 @@ await run(ZIPALIGN, ['-f', '4', path.join(B, 'base.apk'), path.join(B, 'aligned.
 console.log('\n[7/7] 签名 (apksigner)');
 const KS = path.join(AND, 'keystore', 'kaoyan.keystore');
 fs.mkdirSync(path.dirname(KS), { recursive: true });
+// CI 里可通过 secret 提供同一份证书，保证与本地构建的签名一致
+if (!fs.existsSync(KS) && process.env.ANDROID_KEYSTORE_BASE64) {
+  fs.writeFileSync(KS, Buffer.from(process.env.ANDROID_KEYSTORE_BASE64, 'base64'));
+  console.log('      已从 ANDROID_KEYSTORE_BASE64 还原签名证书');
+}
 if (!fs.existsSync(KS)) {
   console.log('      首次生成签名证书 —— 之后请勿删除 android/keystore/ ，否则无法覆盖升级');
   await run('keytool', ['-genkeypair', '-keystore', KS, '-alias', 'kaoyan', '-storepass', 'android',
@@ -98,11 +144,11 @@ if (!fs.existsSync(KS)) {
   console.log('      复用固定签名证书 android/keystore/kaoyan.keystore');
 }
 const finalApk = path.join(OUT, 'kaoyan-408.apk');
-await run('cmd.exe', ['/c', APKSIGNER, 'sign', '--ks', KS, '--ks-key-alias', 'kaoyan',
+await run(APKSIGNER, ['sign', '--ks', KS, '--ks-key-alias', 'kaoyan',
   '--ks-pass', 'pass:android', '--key-pass', 'pass:android',
   '--out', finalApk, path.join(B, 'aligned.apk')]);
 
-await run('cmd.exe', ['/c', APKSIGNER, 'verify', '--print-certs', finalApk]);
+await run(APKSIGNER, ['verify', '--print-certs', finalApk]);
 
 const mb = (fs.statSync(finalApk).size / 1024 / 1024).toFixed(2);
 console.log(`\n✅ APK 已生成：${finalApk}  (${mb} MB)  v${VER.name} / ${VER.code}`);

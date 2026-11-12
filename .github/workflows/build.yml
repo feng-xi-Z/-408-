@@ -1,0 +1,121 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建与测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 安装 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 SDK 组件
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platforms;android-35" "build-tools;34.0.0"
+          echo "SDK 位于 $ANDROID_SDK_ROOT"
+
+      - name: 合并成单文件网页
+        run: node tools/build.mjs
+
+      - name: 校验题库结构
+        run: node tools/check-all.mjs
+
+      - name: 静态审计（图标/动作/类名/路由）
+        run: node tools/audit.mjs
+
+      - name: 安装测试依赖
+        run: npm install jsdom --no-save --no-audit --no-fund
+
+      - name: 端到端交互测试
+        run: node tools/smoke-test.mjs
+
+      - name: 构建 APK
+        env:
+          # 若配置了该 secret，CI 产物将与本地构建同签名；未配置则用临时证书
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: node tools/build-apk.mjs
+
+      - name: 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaoyan-408-apk
+          path: dist/kaoyan-408.apk
+
+      - name: 上传单文件网页
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaoyan-408-html
+          path: dist/kaoyan-408.html
+
+  release:
+    name: 发布 Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 读取版本号
+        id: ver
+        run: |
+          NAME=$(node -p "require('./android/version.json').name")
+          CODE=$(node -p "require('./android/version.json').code")
+          echo "name=$NAME" >> $GITHUB_OUTPUT
+          echo "code=$CODE" >> $GITHUB_OUTPUT
+          echo "版本：v$NAME (versionCode $CODE)"
+
+      - name: 发布
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 研途 408 v${{ steps.ver.outputs.name }}
+          files: |
+            dist/kaoyan-408.apk
+            dist/kaoyan-408.html
+          generate_release_notes: true
+          body: |
+            ## 研途 408 · v${{ steps.ver.outputs.name }}
+
+            安卓考研刷题与速背应用，完全离线、不申请网络权限。
+
+            ### 下载
+
+            | 文件 | 说明 |
+            |---|---|
+            | `kaoyan-408.apk` | 安卓安装包，Android 5.0+，传到手机点开安装 |
+            | `kaoyan-408.html` | 单文件网页版，手机浏览器直接打开也能用 |
+
+            ### 内容
+
+            - 208 道题 / 117 张速背卡片，覆盖数据结构、计算机组成原理、操作系统、计算机网络、高等数学（一）
+            - 408 综合按真实卷面配比动态组卷
+            - 双入口：模拟题练习（按章节刷题、即时判分、错题本详解）+ 知识点速查速背（翻卡、搜索、收藏）
+
+            > 安装时若提示「未知来源应用」，选择允许即可 —— 应用使用本地自签名证书，属于正常现象。
+
+            versionCode: `${{ steps.ver.outputs.code }}`

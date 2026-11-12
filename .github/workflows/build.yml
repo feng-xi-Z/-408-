@@ -30,14 +30,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: 安装 Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: 安装 SDK 组件
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "platforms;android-35" "build-tools;34.0.0"
-          echo "SDK 位于 $ANDROID_SDK_ROOT"
+          set -e
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_SDK_ROOT" || true
+          # runner 自带 Android SDK，直接把 sdkmanager 找出来用
+          SDKM=$(command -v sdkmanager || find "$ANDROID_SDK_ROOT" -name sdkmanager -type f 2>/dev/null | sort -r | head -1)
+          echo "sdkmanager = $SDKM"
+          test -n "$SDKM"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" --install "platforms;android-35" "build-tools;34.0.0"
+          echo "--- 安装结果 ---"
+          ls "$ANDROID_SDK_ROOT/platforms"
+          ls "$ANDROID_SDK_ROOT/build-tools"
 
       - name: 合并成单文件网页
         run: node tools/build.mjs

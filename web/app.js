@@ -581,9 +581,13 @@ function renderResult() {
     '<div><b style="color:var(--red)">' + (r.total - r.right) + '</b><span>答错</span></div>' +
     '<div><b>' + fmtTime(r.ms) + '</b><span>用时</span></div>' +
     '</div>';
-  h += '<div class="actbar" style="position:static;background:none;margin-top:16px">' +
+  h += '<div class="actbar" style="position:static;background:none;margin-top:16px;margin-bottom:0">' +
     (r.wrong.length ? '<button class="btn primary" data-act="redo">' + ic('refresh', 18) + '重做错题（' + r.wrong.length + '）</button>' : '') +
     '<button class="btn ghost" data-act="again">再来一遍</button></div>';
+  h += '<div class="rowbtns">' +
+    '<button class="btn ghost" data-act="go" data-h="/">' + ic('home', 16) + '回到首页</button>' +
+    '<button class="btn ghost" data-act="go" data-h="/practice/' + (r.sid || 'all') + '">' + ic('list', 16) + '返回本科目</button>' +
+    '</div>';
   if (r.wrong.length) {
     h += '<div class="sec-title">错题回顾 <span class="sub">点开看解析</span></div>';
     h += r.wrong.map(function (q, i) {
@@ -591,9 +595,10 @@ function renderResult() {
       return '<div class="qcard"><div class="h"><span class="idx">' + (i + 1) + '</span>' +
         '<span>' + subjShort(q) + ' · ' + chName(q.sid, q.ch) + '</span></div>' +
         '<div class="s">' + rich(q.stem) + '</div>' +
-        '<div class="ans">你的答案：<i style="color:var(--red)">' + (my.length ? my.map(function (k) { return 'ABCDEFGH'[k]; }).join('') : '未作答') + '</i>' +
-        ' ｜ 正确答案：<i style="color:var(--green)">' + (q.ans || []).map(function (k) { return 'ABCDEFGH'[k]; }).join('') + '</i>' +
-        (q.ex ? '<div style="margin-top:7px;padding-top:7px;border-top:1px dashed var(--line)">' + rich(q.ex) + '</div>' : '') +
+        optionsHtml(q, my) +
+        '<div class="qex"><b style="color:var(--red)">你的答案 ' + (my.length ? letters(my) : '未作答') + '</b>' +
+        '　<b style="color:var(--green)">正确答案 ' + letters(q.ans) + '</b>' +
+        (q.ex ? '<div style="margin-top:6px">' + rich(q.ex) + '</div>' : '') +
         '</div></div>';
     }).join('');
   } else {

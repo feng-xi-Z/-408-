@@ -103,12 +103,14 @@ public class MainActivity extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK && web != null) {
+            // 必须让 JS 返回布尔值：evaluateJavascript 对字符串结果会带上引号，
+            // 那样 "true".equals(value) 永远不成立，会导致每次按返回都直接退出应用。
             web.evaluateJavascript(
-                    "(function(){try{return window.__back()?'true':'false'}catch(e){return 'false'}})()",
+                    "(function(){try{return !!window.__back();}catch(e){return false;}})()",
                     new ValueCallback<String>() {
                         @Override
                         public void onReceiveValue(String value) {
-                            if (!"true".equals(value)) finish();
+                            if (value == null || !value.contains("true")) finish();
                         }
                     });
             return true;

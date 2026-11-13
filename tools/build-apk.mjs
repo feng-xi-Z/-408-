@@ -89,10 +89,16 @@ await run(AAPT2, ['compile', '--dir', path.join(AND, 'res'), '-o', path.join(B, 
 
 console.log('\n[2/7] 链接资源并打包 assets (aapt2 link)');
 const VER = JSON.parse(fs.readFileSync(path.join(AND, 'version.json'), 'utf8'));
+// 直接把版本号写进一份临时 Manifest：aapt2 的 --version-code 在部分版本上不会覆盖文件里的值
+const rawManifest = fs.readFileSync(path.join(AND, 'AndroidManifest.xml'), 'utf8');
+const genManifest = path.join(B, 'AndroidManifest.xml');
+fs.writeFileSync(genManifest, rawManifest
+  .replace(/android:versionCode="[^"]*"/, 'android:versionCode="' + VER.code + '"')
+  .replace(/android:versionName="[^"]*"/, 'android:versionName="' + VER.name + '"'), 'utf8');
 await run(AAPT2, [
   'link', '-o', path.join(B, 'base.apk'),
   '-I', AJAR,
-  '--manifest', path.join(AND, 'AndroidManifest.xml'),
+  '--manifest', genManifest,
   '-R', path.join(B, 'res.zip'),
   '-A', path.join(AND, 'assets'),
   '--java', path.join(B, 'gen'),

@@ -348,6 +348,10 @@ svg{display:block;}
   font-size:12.5px;line-height:1.7;color:var(--ink-2);}
 .miniq .tx b{font-weight:500;font-size:13px;line-height:1.5;white-space:normal;display:block;}
 
+/* 结果页的两排导航按钮 */
+.rowbtns{display:flex;gap:10px;margin-top:10px;}
+.rowbtns .btn{flex:1;height:42px;font-size:13.5px;}
+
 /* ============ 速背卡片内的表格 ============ */
 .kp-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:9px 0 4px;}
 .kp-table{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.55;}

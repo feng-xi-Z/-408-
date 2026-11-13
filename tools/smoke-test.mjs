@@ -86,7 +86,8 @@ ok(q('.cnt').textContent.includes('2/'), '题号前进到 2');
 console.log('\n[8] 答题卡抽屉');
 click(byAct('card')[0]);
 ok(!!doc.getElementById('sheet'), '答题卡抽屉打开');
-ok(doc.querySelectorAll('.jg').length === 5, '答题卡 5 个格子（绪论 5 题）');
+const introCount = D.q.ds.filter(x => x.ch === 'ds-1').length;
+ok(doc.querySelectorAll('.jg').length === introCount, `答题卡 ${introCount} 个格子（绪论 ${introCount} 题）`);
 ok(!!q('.jg.ok') || !!q('.jg.bad'), '已答题有对错标记');
 click(byAct('jump', doc.getElementById('sheet'))[0]);
 await new Promise(r => setTimeout(r, 250));
@@ -184,6 +185,11 @@ for (let i = 0; i < total; i++) {
 ok(text().includes('正确率'), '结果页显示正确率');
 ok(!!q('.res-stats') || text().includes('答对'), '结果页显示统计');
 ok(text().includes('错题回顾') || text().includes('全对'), '结果页有错题回顾或全对提示');
+ok(text().includes('回到首页'), '结果页有一键回首页');
+ok(text().includes('返回本科目'), '结果页有返回本科目');
+ok(doc.querySelectorAll('.ansopt').length > 0, '结果页错题回顾也展示选项');
+click([...doc.querySelectorAll('[data-act="go"]')].find(b => b.getAttribute('data-h') === '/'));
+ok(!!q('.hero'), '点「回到首页」确实回到首页');
 
 console.log('\n' + (fails.length ? `❌ ${fails.length} 项失败：\n  - ` + fails.join('\n  - ') : '✅ 全部交互测试通过'));
 process.exit(fails.length ? 1 : 0);
